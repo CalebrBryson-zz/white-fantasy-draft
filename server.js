@@ -2,6 +2,7 @@ var express = require("express");
 var bodyParser = require("body-parser");
 var mongodb = require("mongodb");
 var ObjectID = mongodb.ObjectID;
+const path = require('path');
 
 var PLAYERS_COLLECTION = 'players';
 
@@ -35,6 +36,9 @@ function handleError(res, reason, message, code) {
   res.status(code || 500).json({"error": message});
 }
 
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, 'build')));
+
 // CONTACTS API ROUTES BELOW
 app.get("/api/players", function(req, res) {
   db.collection(PLAYERS_COLLECTION).find({}).toArray(function(err, docs) {
@@ -46,3 +50,8 @@ app.get("/api/players", function(req, res) {
   });
 });
 
+// The "catchall" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname+'/build/index.html'));
+});

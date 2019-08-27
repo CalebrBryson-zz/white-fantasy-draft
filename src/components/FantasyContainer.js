@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useReducer } from "react";
 import axios from "axios";
 import PlayerTable from "./PlayerTable";
-
+import DraftTable from "./DraftTable";
 export default function FantasyContainer() {
   const [fetched, setFetched] = useState(false);
   useEffect(() => {
@@ -14,9 +14,12 @@ export default function FantasyContainer() {
   }, []);
 
   const initialState = {
+    filter: "",
     sort: "Position",
     playersById: {},
-    sortedIds: []
+    sortedIds: [],
+    draftError: "",
+    draftedPlayers: []
   };
 
   function playerIdsByFilter(sort, players) {
@@ -33,16 +36,21 @@ export default function FantasyContainer() {
 
         // names must be equal
         return 0;
-
       })
       .sort((player1, player2) => {
         const value1 = player1[1];
-        console.log(value1[sort]);
         const value2 = player2[1];
+        /* this is meant to drive empty comparisons to the bottom 
+        if(!value1[sort]){
+          console.log(value1[sort]);
+          return 1;
+        }
+        */
         if (value1[sort] < value2[sort]) {
           return -1;
         }
-        if (value1[sort] > value2[sort]) {
+
+        if (!value1[sort] || value1[sort] > value2[sort]) {
           return 1;
         }
 
@@ -58,14 +66,13 @@ export default function FantasyContainer() {
   function reducePlayersById(players) {
     return players.reduce((acc, player) => {
       const id = player._id;
-      delete player._id;
       acc[id] = player;
       return acc;
     }, {});
   }
 
   function reducer(state, action) {
-    console.log({action});
+    console.log({ action });
     switch (action.type) {
       case "setPlayers": {
         const playersById = reducePlayersById(action.payload);
@@ -86,25 +93,84 @@ export default function FantasyContainer() {
           sortedIds
         };
       }
+      case "setFilter": {
+        return {
+          ...state,
+          filter: action.payload
+        };
+      }
+      case "draft": {
+        const draftedPlayers = [...state.draftedPlayers];
+        try {
+          const draftKey = action.payload.toUpperCase();
+          const draftPlayer = Object.values(state.playersById).find(player => {
+            const playerDraftKey = player["Player code"];
+            return draftKey === playerDraftKey.toUpperCase();
+          });
+          draftedPlayers.push(draftPlayer._id);
+          return {
+            ...state,
+            draftedPlayers,
+            draftError: ''
+          };
+        } catch (error) {
+          return {
+            ...state,
+            draftError: `could not find player with code: ${action.payload} `
+          };
+        }
+      }
+      case "undraft": {
+        const draftedPlayers = state.draftedPlayers.filter(playerId => {
+          return playerId !== action.payload;
+        });
+        return {
+          ...state,
+          draftedPlayers
+        };
+      }
       default:
         throw new Error();
     }
   }
 
-
   const [state, dispatch] = useReducer(reducer, initialState);
-  function selectFilteredPlayers(state) {
-    return state.sortedIds.map(playerId => {
+  function selectPlayers(state) {
+    //sort players
+    const sortedPlayers = state.sortedIds.map(playerId => {
+      return state.playersById[playerId];
+    }).filter(player => {
+      return !state.draftedPlayers.includes(player._id)
+    });
+    if (state.filter) {
+      // if filtered
+      return sortedPlayers.filter(player => {
+        return player.Position === state.filter;
+      });
+    }
+    return sortedPlayers;
+  }
+
+  function selectDraftedPlayers(state) {
+    return state.draftedPlayers.map(playerId => {
       return state.playersById[playerId];
     });
   }
-      console.log({state});
+
+  console.log({ state });
   return (
     <div>
       {!fetched ? (
         <div>Loading.... </div>
       ) : (
-        <PlayerTable players={selectFilteredPlayers(state)} dispatch={dispatch} />
+        <>
+          <DraftTable
+            dispatch={dispatch}
+            draftedPlayers={selectDraftedPlayers(state)}
+            draftError={state.draftError}
+          />
+          <PlayerTable players={selectPlayers(state)} dispatch={dispatch} />
+        </>
       )}
     </div>
   );
